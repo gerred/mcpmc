@@ -115,7 +115,7 @@ export class MinecraftServer {
     this.server
       .notification({
         method,
-        params,
+        params: JSON.parse(JSON.stringify(params)),
       })
       .catch((error) => {
         console.error("Failed to send notification:", error);
@@ -159,15 +159,31 @@ export class MinecraftServer {
           uuid: player.uuid,
           ping: player.ping,
         })),
-      navigateTo: async (
-        x: number,
-        y: number,
-        z: number,
+      navigateRelative: async (
+        dx: number,
+        dy: number,
+        dz: number,
         progressCallback?: (progress: number) => void
       ) => {
-        const goal = new goals.GoalNear(x, y, z, 1);
+        const pos = bot.entity.position;
+        const yaw = bot.entity.yaw;
+        const sin = Math.sin(yaw);
+        const cos = Math.cos(yaw);
+        const worldDx = dx * cos - dz * sin;
+        const worldDz = dx * sin + dz * cos;
+
+        const goal = new goals.GoalNear(
+          pos.x + worldDx,
+          pos.y + dy,
+          pos.z + worldDz,
+          1
+        );
         const startPos = bot.entity.position;
-        const targetPos = new Vec3(x, y, z);
+        const targetPos = new Vec3(
+          pos.x + worldDx,
+          pos.y + dy,
+          pos.z + worldDz
+        );
         const totalDistance = startPos.distanceTo(targetPos);
 
         // Set up progress monitoring
@@ -211,31 +227,6 @@ export class MinecraftServer {
           });
         }
       },
-      navigateRelative: async (
-        dx: number,
-        dy: number,
-        dz: number,
-        progressCallback?: (progress: number) => void
-      ) => {
-        const pos = bot.entity.position;
-        const yaw = bot.entity.yaw;
-        const sin = Math.sin(yaw);
-        const cos = Math.cos(yaw);
-        const worldDx = dx * cos - dz * sin;
-        const worldDz = dx * sin + dz * cos;
-
-        await wrapper.navigateTo(
-          pos.x + worldDx,
-          pos.y + dy,
-          pos.z + worldDz,
-          progressCallback
-        );
-      },
-      digBlock: async (x: number, y: number, z: number) => {
-        const block = bot.blockAt(new Vec3(x, y, z));
-        if (!block) throw new Error("No block at position");
-        await bot.dig(block);
-      },
       digBlockRelative: async (dx: number, dy: number, dz: number) => {
         const pos = bot.entity.position;
         const yaw = bot.entity.yaw;
@@ -253,14 +244,27 @@ export class MinecraftServer {
         if (!block) throw new Error("No block at relative position");
         await bot.dig(block);
       },
-      digArea: async (start, end, progressCallback) => {
-        // Implement area digging logic
-        const minX = Math.min(start.x, end.x);
-        const maxX = Math.max(start.x, end.x);
-        const minY = Math.min(start.y, end.y);
-        const maxY = Math.max(start.y, end.y);
-        const minZ = Math.min(start.z, end.z);
-        const maxZ = Math.max(start.z, end.z);
+      digAreaRelative: async (start, end, progressCallback) => {
+        const pos = bot.entity.position;
+        const yaw = bot.entity.yaw;
+        const sin = Math.sin(yaw);
+        const cos = Math.cos(yaw);
+
+        const transformPoint = (dx: number, dy: number, dz: number) => ({
+          x: Math.floor(pos.x + dx * cos - dz * sin),
+          y: Math.floor(pos.y + dy),
+          z: Math.floor(pos.z + dx * sin + dz * cos),
+        });
+
+        const absStart = transformPoint(start.dx, start.dy, start.dz);
+        const absEnd = transformPoint(end.dx, end.dy, end.dz);
+
+        const minX = Math.min(absStart.x, absEnd.x);
+        const maxX = Math.max(absStart.x, absEnd.x);
+        const minY = Math.min(absStart.y, absEnd.y);
+        const maxY = Math.max(absStart.y, absEnd.y);
+        const minZ = Math.min(absStart.z, absEnd.z);
+        const maxZ = Math.max(absStart.z, absEnd.z);
 
         const totalBlocks =
           (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
@@ -284,23 +288,6 @@ export class MinecraftServer {
             }
           }
         }
-      },
-      digAreaRelative: async (start, end, progressCallback) => {
-        const pos = bot.entity.position;
-        const yaw = bot.entity.yaw;
-        const sin = Math.sin(yaw);
-        const cos = Math.cos(yaw);
-
-        const transformPoint = (dx: number, dy: number, dz: number) => ({
-          x: Math.floor(pos.x + dx * cos - dz * sin),
-          y: Math.floor(pos.y + dy),
-          z: Math.floor(pos.z + dx * sin + dz * cos),
-        });
-
-        const absStart = transformPoint(start.dx, start.dy, start.dz);
-        const absEnd = transformPoint(end.dx, end.dy, end.dz);
-
-        await wrapper.digArea(absStart, absEnd, progressCallback);
       },
       getBlocksNearby: () => {
         const pos = bot.entity.position;

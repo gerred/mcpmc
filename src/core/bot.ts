@@ -246,30 +246,33 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
   }
 
   async navigateTo(
-    x: number, 
-    y: number, 
+    x: number,
+    y: number,
     z: number,
     progressCallback?: (progress: number) => void
   ): Promise<void> {
     if (!this.bot) return this.wrapError("Not connected");
     const goal = new goals.GoalNear(x, y, z, 1);
-    
+
     try {
       const startPos = this.bot.entity.position;
       const targetPos = new Vec3(x, y, z);
       const totalDistance = startPos.distanceTo(targetPos);
-      
+
       // Set up progress monitoring
       const checkProgress = () => {
         if (!this.bot) return;
         const currentPos = this.bot.entity.position;
         const remainingDistance = currentPos.distanceTo(targetPos);
-        const progress = Math.min(100, ((totalDistance - remainingDistance) / totalDistance) * 100);
+        const progress = Math.min(
+          100,
+          ((totalDistance - remainingDistance) / totalDistance) * 100
+        );
         progressCallback?.(progress);
       };
 
       const progressInterval = setInterval(checkProgress, 500);
-      
+
       try {
         await this.bot.pathfinder.goto(goal);
       } finally {
@@ -367,22 +370,58 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
     const minZ = Math.min(start.z, end.z);
     const maxZ = Math.max(start.z, end.z);
 
-    // Create a list of all positions to dig, sorted from top to bottom
-    const positions: Vec3[] = [];
+    // Pre-scan the area to identify diggable blocks and create an efficient digging plan
+    const diggableBlocks: Vec3[] = [];
+    const undiggableBlocks: Vec3[] = [];
+
+    // Helper to check if a block is diggable
+    const isDiggable = (block: PrismarineBlock | null): boolean => {
+      if (!block) return false;
+      if (block.name === "air") return false;
+      if (block.hardness < 0) return false; // Bedrock and other unbreakable blocks
+
+      // Skip fluid blocks
+      if (
+        block.name.includes("water") ||
+        block.name.includes("lava") ||
+        block.name.includes("flowing")
+      ) {
+        return false;
+      }
+
+      // Skip blocks that are known to be unbreakable or special
+      const unbreakableBlocks = [
+        "barrier",
+        "bedrock",
+        "end_portal",
+        "end_portal_frame",
+      ];
+      if (unbreakableBlocks.includes(block.name)) return false;
+
+      return true;
+    };
+
+    // First pass: identify all diggable blocks
     for (let y = maxY; y >= minY; y--) {
       for (let x = minX; x <= maxX; x++) {
         for (let z = minZ; z <= maxZ; z++) {
-          positions.push(new Vec3(x, y, z));
+          const pos = new Vec3(x, y, z);
+          const block = this.bot.blockAt(pos);
+
+          if (isDiggable(block)) {
+            diggableBlocks.push(pos);
+          } else if (block && block.name !== "air") {
+            undiggableBlocks.push(pos);
+          }
         }
       }
     }
 
-    const totalBlocks = positions.length;
+    const totalBlocks = diggableBlocks.length;
     let blocksDug = 0;
     let lastProgressUpdate = Date.now();
 
-    // We'll attach a disconnect handler so that if the bot disconnects,
-    // we stop digging
+    // Set up disconnect handler
     let disconnected = false;
     const disconnectHandler = () => {
       disconnected = true;
@@ -390,64 +429,119 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
     this.bot.once("end", disconnectHandler);
 
     try {
-      // Try to move near the upper corner first
-      const startPos = new Vec3(minX - 1, maxY + 1, minZ - 1);
-      try {
-        await this.navigateTo(startPos.x, startPos.y, startPos.z);
-      } catch {
-        this.logWarning("Could not reach optimal digging start position");
+      // Group blocks into "slices" for more efficient digging
+      const sliceSize = 4; // Size of each work area
+      const slices: Vec3[][] = [];
+
+      // Group blocks into nearby clusters for efficient movement
+      for (let x = minX; x <= maxX; x += sliceSize) {
+        for (let z = minZ; z <= maxZ; z += sliceSize) {
+          const slice: Vec3[] = diggableBlocks.filter(
+            (pos) =>
+              pos.x >= x &&
+              pos.x < x + sliceSize &&
+              pos.z >= z &&
+              pos.z < z + sliceSize
+          );
+
+          if (slice.length > 0) {
+            // Sort the slice from top to bottom for safer digging
+            slice.sort((a, b) => b.y - a.y);
+            slices.push(slice);
+          }
+        }
       }
 
-      for (const pos of positions) {
+      // Process each slice
+      for (const slice of slices) {
         if (disconnected) {
           return this.wrapError("Disconnected while digging area");
         }
 
-        const block = this.bot.blockAt(pos);
-        if (!block || block.name === "air") {
-          // Skip air but increment progress
-          blocksDug++;
-          continue;
-        }
+        // Find optimal position to dig this slice
+        const sliceCenter = slice
+          .reduce((acc, pos) => acc.plus(pos), new Vec3(0, 0, 0))
+          .scaled(1 / slice.length);
 
+        // Try to move to a good position for this slice
         try {
-          // Check if we need to move closer
-          const distance = pos.distanceTo(this.bot.entity.position);
-          if (distance > 4) {
-            // If we're more than 4 blocks away
-            try {
-              const goal = new goals.GoalNear(pos.x, pos.y, pos.z, 3);
-              await this.bot.pathfinder.goto(goal);
-            } catch (error) {
-              this.logWarning(
-                `Could not move closer to block at ${pos.x}, ${pos.y}, ${pos.z}:`,
-                error
-              );
-              // Continue anyway - the block might still be reachable
-            }
-          }
-
-          await this.digBlock(pos.x, pos.y, pos.z);
-          blocksDug++;
-
-          // Only call progressCallback every 500ms to avoid spam
-          const now = Date.now();
-          if (progressCallback && now - lastProgressUpdate >= 500) {
-            const progress = Math.floor((blocksDug / totalBlocks) * 100);
-            progressCallback(progress, blocksDug, totalBlocks);
-            lastProgressUpdate = now;
-          }
+          // Position ourselves at a good vantage point for the slice
+          const standingPos = new Vec3(
+            sliceCenter.x - 1,
+            Math.max(sliceCenter.y, minY),
+            sliceCenter.z - 1
+          );
+          await this.navigateTo(standingPos.x, standingPos.y, standingPos.z);
         } catch (error) {
-          this.logError(
-            `Failed to dig block at ${pos.x}, ${pos.y}, ${pos.z}:`,
+          this.logWarning(
+            "Could not reach optimal digging position for slice",
             error
           );
-          // Continue to next block
+          // Continue anyway - some blocks might still be reachable
+        }
+
+        // Process blocks in the slice from top to bottom
+        for (const pos of slice) {
+          if (disconnected) {
+            return this.wrapError("Disconnected while digging area");
+          }
+
+          try {
+            const block = this.bot.blockAt(pos);
+            if (!block || !isDiggable(block)) {
+              continue; // Skip if block changed or became undiggable
+            }
+
+            // Check if we need to move closer
+            const distance = pos.distanceTo(this.bot.entity.position);
+            if (distance > 4) {
+              try {
+                const goal = new goals.GoalNear(pos.x, pos.y, pos.z, 3);
+                await this.bot.pathfinder.goto(goal);
+              } catch (error) {
+                this.logWarning(
+                  `Could not move closer to block at ${pos.x}, ${pos.y}, ${pos.z}:`,
+                  error
+                );
+                continue; // Skip this block if we can't reach it
+              }
+            }
+
+            await this.digBlock(pos.x, pos.y, pos.z);
+            blocksDug++;
+
+            // Update progress every 500ms
+            const now = Date.now();
+            if (progressCallback && now - lastProgressUpdate >= 500) {
+              const progress = Math.floor((blocksDug / totalBlocks) * 100);
+              progressCallback(progress, blocksDug, totalBlocks);
+              lastProgressUpdate = now;
+            }
+          } catch (error) {
+            // Log the error but continue with other blocks
+            this.logWarning(
+              `Failed to dig block at ${pos.x}, ${pos.y}, ${pos.z}:`,
+              error
+            );
+            continue;
+          }
         }
       }
 
+      // Final progress update
       if (progressCallback) {
         progressCallback(100, blocksDug, totalBlocks);
+      }
+
+      // Log summary of undiggable blocks if any
+      if (undiggableBlocks.length > 0) {
+        this.logWarning(
+          `Completed digging with ${undiggableBlocks.length} undiggable blocks`,
+          undiggableBlocks.map((pos) => ({
+            position: pos,
+            type: this.bot?.blockAt(pos)?.name || "unknown",
+          }))
+        );
       }
     } finally {
       // Clean up the disconnect handler
@@ -567,8 +661,8 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
   }
 
   async navigateRelative(
-    dx: number, 
-    dy: number, 
+    dx: number,
+    dy: number,
     dz: number,
     progressCallback?: (progress: number) => void
   ): Promise<void> {

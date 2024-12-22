@@ -25,6 +25,7 @@ export class MockMinecraftBot extends EventEmitter implements MinecraftBot {
   private isConnected = true;
   private _inventory: { items: InventoryItem[] } = { items: [] };
   private connectCount = 0;
+  private _blocks: { [key: string]: string } = {};
 
   get entity() {
     if (!this.isConnected) throw new Error("Not connected");
@@ -146,8 +147,14 @@ export class MockMinecraftBot extends EventEmitter implements MinecraftBot {
     if (!this.isConnected) throw new Error("Not connected");
   }
 
-  async placeBlock(x: number, y: number, z: number, blockName: string) {
+  async placeBlock(
+    x: number,
+    y: number,
+    z: number,
+    blockName: string
+  ): Promise<void> {
     if (!this.isConnected) throw new Error("Not connected");
+    this._blocks[`${x},${y},${z}`] = blockName;
   }
 
   async followPlayer(username: string, distance: number) {

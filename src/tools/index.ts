@@ -3,19 +3,13 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   ChatSchema,
-  NavigateSchema,
   NavigateRelativeSchema,
-  DigBlockSchema,
   DigBlockRelativeSchema,
-  DigAreaSchema,
   DigAreaRelativeSchema,
-  PlaceBlockSchema,
   FollowPlayerSchema,
   AttackEntitySchema,
-  InspectBlockSchema,
   FindBlocksSchema,
   FindEntitiesSchema,
-  CheckPathSchema,
 } from "../schemas.js";
 
 type InputSchema = {
@@ -63,22 +57,10 @@ export const MINECRAFT_TOOLS: Tool[] = [
     inputSchema: toInputSchema(ChatSchema),
   },
   {
-    name: "navigate_to",
-    description:
-      "Make the bot walk to specific absolute coordinates in the world. X is east(+)/west(-), Y is up(+)/down(-), Z is south(+)/north(-)",
-    inputSchema: toInputSchema(NavigateSchema),
-  },
-  {
     name: "navigate_relative",
     description:
       "Make the bot walk relative to its current position. dx moves right(+)/left(-), dy moves up(+)/down(-), dz moves forward(+)/back(-) relative to bot's current position and orientation",
     inputSchema: toInputSchema(NavigateRelativeSchema),
-  },
-  {
-    name: "dig_block",
-    description:
-      "Dig a single block at specific absolute coordinates. X is east(+)/west(-), Y is up(+)/down(-), Z is south(+)/north(-)",
-    inputSchema: toInputSchema(DigBlockSchema),
   },
   {
     name: "dig_block_relative",
@@ -87,22 +69,46 @@ export const MINECRAFT_TOOLS: Tool[] = [
     inputSchema: toInputSchema(DigBlockRelativeSchema),
   },
   {
-    name: "dig_area",
-    description:
-      "Dig all blocks in a rectangular area defined by two corner points using absolute coordinates. X is east(+)/west(-), Y is up(+)/down(-), Z is south(+)/north(-)",
-    inputSchema: toInputSchema(DigAreaSchema),
-  },
-  {
     name: "dig_area_relative",
     description:
-      "Dig all blocks in a rectangular area relative to the bot's current position. For both start and end points: dx moves right(+)/left(-), dy moves up(+)/down(-), dz moves forward(+)/back(-) relative to bot's current position and orientation",
+      "Dig multiple blocks in an area relative to the bot's current position. Coordinates use the same relative system as dig_block_relative. Use this for clearing spaces.",
     inputSchema: toInputSchema(DigAreaRelativeSchema),
   },
   {
     name: "place_block",
     description:
-      "Place a block at specific coordinates. X is east(+)/west(-), Y is up(+)/down(-), Z is south(+)/north(-). The bot must have the block in its inventory",
-    inputSchema: toInputSchema(PlaceBlockSchema),
+      "Place a block from the bot's inventory at the specified position. Use this for building structures.",
+    inputSchema: toInputSchema(
+      z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number(),
+        blockName: z.string(),
+      })
+    ),
+  },
+  {
+    name: "find_blocks",
+    description:
+      "Find nearby blocks of specific types. Use this to locate building materials or identify terrain.",
+    inputSchema: toInputSchema(FindBlocksSchema),
+  },
+  {
+    name: "craft_item",
+    description:
+      "Craft items using materials in inventory. Can use a crafting table if specified.",
+    inputSchema: toInputSchema(CraftItemSchema),
+  },
+  {
+    name: "inspect_inventory",
+    description:
+      "Check the contents of the bot's inventory to see available materials.",
+    inputSchema: toInputSchema(
+      z.object({
+        itemType: z.string().optional(),
+        includeEquipment: z.boolean().optional(),
+      })
+    ),
   },
   {
     name: "follow_player",
@@ -113,52 +119,5 @@ export const MINECRAFT_TOOLS: Tool[] = [
     name: "attack_entity",
     description: "Attack a specific entity near the bot",
     inputSchema: toInputSchema(AttackEntitySchema),
-  },
-  {
-    name: "inspect_block",
-    description:
-      "Get detailed information about a block at a specific position",
-    inputSchema: toInputSchema(InspectBlockSchema),
-  },
-  {
-    name: "find_blocks",
-    description: "Search for blocks of specific types within range",
-    inputSchema: toInputSchema(FindBlocksSchema),
-  },
-  {
-    name: "find_entities",
-    description: "Search for entities of specific types within range",
-    inputSchema: toInputSchema(FindEntitiesSchema),
-  },
-  {
-    name: "check_path",
-    description:
-      "Check if a path exists to a destination and get information about obstacles",
-    inputSchema: toInputSchema(CheckPathSchema),
-  },
-  {
-    name: "craft_item",
-    description: "Craft an item using available materials in inventory",
-    inputSchema: toInputSchema(CraftItemSchema),
-  },
-  {
-    name: "smelt_item",
-    description: "Smelt an item using a furnace and specified fuel",
-    inputSchema: toInputSchema(SmeltItemSchema),
-  },
-  {
-    name: "equip_item",
-    description: "Equip an item from inventory to a specific slot",
-    inputSchema: toInputSchema(EquipItemSchema),
-  },
-  {
-    name: "deposit_item",
-    description: "Deposit an item from inventory into a container",
-    inputSchema: toInputSchema(ContainerInteractionSchema),
-  },
-  {
-    name: "withdraw_item",
-    description: "Withdraw an item from a container into inventory",
-    inputSchema: toInputSchema(ContainerInteractionSchema),
   },
 ];

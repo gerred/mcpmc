@@ -73,34 +73,24 @@ export interface MinecraftBot {
   // ---- Chat ----
   chat(message: string): void;
 
-  // ---- Movement & Digging ----
+  // ---- State & Info ----
   getPosition(): Position | null;
   getHealth(): number;
   getInventory(): InventoryItem[];
   getPlayers(): Player[];
-  navigateTo(x: number, y: number, z: number, progressCallback?: (progress: number) => void): Promise<void>;
-  digBlock(x: number, y: number, z: number): Promise<void>;
-  digArea(
-    start: Position,
-    end: Position,
-    progressCallback?: (
-      progress: number,
-      blocksDug: number,
-      totalBlocks: number
-    ) => void
-  ): Promise<void>;
-  placeBlock(x: number, y: number, z: number, blockName: string): Promise<void>;
-  followPlayer(username: string, distance?: number): Promise<void>;
-  attackEntity(entityName: string, maxDistance?: number): Promise<void>;
-
-  // ---- World Queries ----
-  getEntitiesNearby(maxDistance?: number): Entity[];
   getBlocksNearby(maxDistance?: number, count?: number): Block[];
+  getEntitiesNearby(maxDistance?: number): Entity[];
   getHealthStatus(): HealthStatus;
   getWeather(): Weather;
 
-  // ---- Relative Movement & Digging ----
-  navigateRelative(dx: number, dy: number, dz: number, progressCallback?: (progress: number) => void): Promise<void>;
+  // ---- Relative Movement & Actions ----
+  navigateRelative(
+    dx: number,
+    dy: number,
+    dz: number,
+    progressCallback?: (progress: number) => void
+  ): Promise<void>;
+  navigateTo(x: number, y: number, z: number): Promise<void>;
   digBlockRelative(dx: number, dy: number, dz: number): Promise<void>;
   digAreaRelative(
     start: { dx: number; dy: number; dz: number },
@@ -111,6 +101,11 @@ export interface MinecraftBot {
       totalBlocks: number
     ) => void
   ): Promise<void>;
+  placeBlock(x: number, y: number, z: number, blockName: string): Promise<void>;
+
+  // ---- Entity Interaction ----
+  followPlayer(username: string, distance?: number): Promise<void>;
+  attackEntity(entityName: string, maxDistance?: number): Promise<void>;
 
   // ---- Block & Pathfinding Info ----
   blockAt(position: Vec3): Block | null;
@@ -122,20 +117,6 @@ export interface MinecraftBot {
   }): Vec3[];
   getEquipmentDestSlot(destination: string): number;
   canSeeEntity(entity: Entity): boolean;
-
-  // ---- Expose underlying info for reference ----
-  readonly entity: {
-    position: Vec3;
-    velocity: Vec3;
-    yaw: number;
-    pitch: number;
-  };
-  readonly entities: { [id: string]: Entity };
-  readonly inventory: {
-    items: () => InventoryItem[];
-    slots: { [slot: string]: InventoryItem | null };
-  };
-  readonly pathfinder: any;
 
   // ---- Crafting & Item Management ----
   craftItem(
@@ -152,11 +133,6 @@ export interface MinecraftBot {
     itemName: string,
     destination: "hand" | "off-hand" | "head" | "torso" | "legs" | "feet"
   ): Promise<void>;
-  dropItem(itemName: string, quantity?: number): Promise<void>;
-
-  // ---- Container Interaction ----
-  openContainer(position: Position): Promise<Container>;
-  closeContainer(): void;
   depositItem(
     containerPosition: Position,
     itemName: string,
@@ -168,10 +144,19 @@ export interface MinecraftBot {
     quantity?: number
   ): Promise<void>;
 
-  // ---- Recipe Management ----
-  getRecipe(itemName: string): Recipe | null;
-  listAvailableRecipes(): Recipe[];
-  canCraft(recipe: Recipe): boolean;
+  // ---- Expose underlying info for reference ----
+  readonly entity: {
+    position: Vec3;
+    velocity: Vec3;
+    yaw: number;
+    pitch: number;
+  };
+  readonly entities: { [id: string]: Entity };
+  readonly inventory: {
+    items: () => InventoryItem[];
+    slots: { [slot: string]: InventoryItem | null };
+  };
+  readonly pathfinder: any;
 }
 
 // Utility classes for type conversion between prismarine-xxx and your interfaces

@@ -100,14 +100,18 @@ export interface ToolHandler {
 export class MinecraftToolHandler implements ToolHandler {
   constructor(private bot: MinecraftBot) {}
 
-  private sendJsonRpcNotification(method: string, params: any) {
-    process.stdout.write(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        method,
-        params,
-      }) + "\n"
-    );
+  private wrapError(error: unknown): ToolResponse {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      _meta: {},
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: `Error: ${errorMessage}`,
+        },
+      ],
+    };
   }
 
   async handleChat(message: string): Promise<ToolResponse> {
@@ -127,18 +131,18 @@ export class MinecraftToolHandler implements ToolHandler {
     y: number,
     z: number
   ): Promise<ToolResponse> {
-    let progressToken = Date.now().toString();
+    const progressToken = Date.now().toString();
+    const pos = this.bot.getPosition();
+    if (!pos) throw new Error("Bot position unknown");
 
-    const sendProgress = (progress: number) => {
-      this.sendJsonRpcNotification("tool/progress", {
-        token: progressToken,
-        progress,
-        status: progress < 100 ? "in_progress" : "complete",
-        message: `Navigation progress: ${Math.round(progress)}%`,
-      });
-    };
-
-    await this.bot.navigateTo(x, y, z, sendProgress);
+    await this.bot.navigateRelative(
+      x - pos.x,
+      y - pos.y,
+      z - pos.z,
+      (progress) => {
+        if (progress < 0 || progress > 100) return;
+      }
+    );
 
     return {
       _meta: {
@@ -160,16 +164,9 @@ export class MinecraftToolHandler implements ToolHandler {
   ): Promise<ToolResponse> {
     const progressToken = Date.now().toString();
 
-    const sendProgress = (progress: number) => {
-      this.sendJsonRpcNotification("tool/progress", {
-        token: progressToken,
-        progress,
-        status: progress < 100 ? "in_progress" : "complete",
-        message: `Navigation progress: ${Math.round(progress)}%`,
-      });
-    };
-
-    await this.bot.navigateRelative(dx, dy, dz, sendProgress);
+    await this.bot.navigateRelative(dx, dy, dz, (progress) => {
+      if (progress < 0 || progress > 100) return;
+    });
 
     return {
       _meta: {
@@ -185,9 +182,12 @@ export class MinecraftToolHandler implements ToolHandler {
   }
 
   async handleDigBlock(x: number, y: number, z: number): Promise<ToolResponse> {
-    await this.bot.digBlock(x, y, z);
+    const pos = this.bot.getPosition();
+    if (!pos) throw new Error("Bot position unknown");
+
+    await this.bot.digBlockRelative(x - pos.x, y - pos.y, z - pos.z);
+
     return {
-      _meta: {},
       content: [
         {
           type: "text",
@@ -215,54 +215,39 @@ export class MinecraftToolHandler implements ToolHandler {
   }
 
   async handleDigArea(
-    start: { x: number; y: number; z: number },
-    end: { x: number; y: number; z: number }
+    start: Position,
+    end: Position,
+    progressCallback?: (
+      progress: number,
+      blocksDug: number,
+      totalBlocks: number
+    ) => void
   ): Promise<ToolResponse> {
-    let progress = 0;
-    let blocksDug = 0;
-    let totalBlocks = 0;
+    const pos = this.bot.getPosition();
+    if (!pos) throw new Error("Bot position unknown");
 
-    try {
-      await this.bot.digArea(
-        start,
-        end,
-        (currentProgress, currentBlocksDug, currentTotalBlocks) => {
-          progress = currentProgress;
-          blocksDug = currentBlocksDug;
-          totalBlocks = currentTotalBlocks;
-        }
-      );
+    await this.bot.digAreaRelative(
+      {
+        dx: start.x - pos.x,
+        dy: start.y - pos.y,
+        dz: start.z - pos.z,
+      },
+      {
+        dx: end.x - pos.x,
+        dy: end.y - pos.y,
+        dz: end.z - pos.z,
+      },
+      progressCallback
+    );
 
-      return {
-        _meta: {},
-        content: [
-          {
-            type: "text",
-            text: `Successfully completed digging area from (${start.x}, ${start.y}, ${start.z}) to (${end.x}, ${end.y}, ${end.z}). Dug ${blocksDug} blocks.`,
-          },
-        ],
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const progressMessage =
-        totalBlocks > 0
-          ? `Progress before error: ${progress}% (${blocksDug}/${totalBlocks} blocks)`
-          : "";
-
-      return {
-        _meta: {},
-        content: [
-          {
-            type: "text",
-            text: `Failed to dig area: ${errorMessage}${
-              progressMessage ? `\n${progressMessage}` : ""
-            }`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Dug area from (${start.x}, ${start.y}, ${start.z}) to (${end.x}, ${end.y}, ${end.z})`,
+        },
+      ],
+    };
   }
 
   async handleDigAreaRelative(
@@ -464,15 +449,26 @@ export class MinecraftToolHandler implements ToolHandler {
       };
     });
 
+    // Sort blocks by distance for better readability
+    blocks.sort((a, b) => a.distance - b.distance);
+
+    const summary = `Found ${
+      blocks.length
+    } matching blocks of types: ${blockTypesArray.join(", ")}`;
+    const details = blocks
+      .map(
+        (block) =>
+          `- ${block.name} at (${block.position.x}, ${block.position.y}, ${
+            block.position.z
+          }), ${block.distance.toFixed(1)} blocks away`
+      )
+      .join("\n");
+
     return {
       content: [
         {
           type: "text",
-          text: `Found ${blocks.length} matching blocks:`,
-        },
-        {
-          type: "json",
-          text: JSON.stringify(blocks, null, 2),
+          text: summary + (blocks.length > 0 ? "\n" + details : ""),
         },
       ],
     };
