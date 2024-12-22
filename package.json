@@ -15,7 +15,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir=build --target=node --external '*' && chmod +x build/index.js",
+    "build": "bun build ./src/index.ts --outdir=build --target=node && chmod +x build/index.js",
     "prepare": "husky install && bun run build",
     "watch": "bun build ./src/index.ts --outdir=build --target=node --watch",
     "inspector": "bunx @modelcontextprotocol/inspector build/index.js",
