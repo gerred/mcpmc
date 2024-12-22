@@ -7,6 +7,8 @@
 
 A Model Context Protocol (MCP) server for interacting with Minecraft via Mineflayer. This package enables AI agents to control Minecraft bots through a standardized JSON-RPC interface.
 
+<a href="https://glama.ai/mcp/servers/3ih9dz9kfv"><img width="380" height="200" src="https://glama.ai/mcp/servers/3ih9dz9kfv/badge" alt="MCPMC (Minecraft) MCP server" /></a>
+
 ## Features
 
 - Full MCP compatibility for AI agent integration
