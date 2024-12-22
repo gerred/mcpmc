@@ -1194,6 +1194,20 @@ export class MinecraftServer {
           message: "Mineflayer MCP Server running on stdio",
         },
       });
+
+      // Keep the process alive
+      process.stdin.resume();
+
+      // Handle process termination gracefully
+      process.on("SIGINT", () => {
+        this.bot?.disconnect();
+        process.exit(0);
+      });
+
+      process.on("SIGTERM", () => {
+        this.bot?.disconnect();
+        process.exit(0);
+      });
     } catch (error) {
       // Replace console.error with JSON-RPC error response
       this.server.notification({
@@ -1205,7 +1219,9 @@ export class MinecraftServer {
           }`,
         },
       });
-      process.exit(1);
+
+      // Rethrow the error instead of exiting
+      throw error;
     }
   }
 }

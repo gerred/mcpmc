@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
-// Only if this file is run directly, create and start the server
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Only if this file is run directly or via npx, create and start the server
+if (
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.includes("mcpmc")
+) {
   const { MinecraftServer } = await import("./server.js");
   const { parseArgs } = await import("./cli.js");
 
