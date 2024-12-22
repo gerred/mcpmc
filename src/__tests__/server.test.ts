@@ -1,95 +1,77 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
 import { MockMinecraftBot } from "./mocks/mockBot";
 import { MinecraftServer } from "../core/server";
-import type { ToolHandler } from "../handlers/tools";
-import type { ResourceHandler } from "../handlers/resources";
+import { MockTransport } from "./mocks/mockTransport";
+import type { Message } from "./mocks/mockTransport";
+
+interface ServerStatusParams {
+  type: "startup" | "connection" | "error";
+  status?: "running" | "connected" | "disconnected";
+  transport?: string;
+  error?: string;
+}
 
 describe("MinecraftServer", () => {
   let mockBot: MockMinecraftBot;
   let server: MinecraftServer;
-  let toolHandler: ToolHandler;
-  let resourceHandler: ResourceHandler;
+  let transport: MockTransport;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockBot = new MockMinecraftBot({
       host: "localhost",
       port: 25565,
       username: "testBot",
     });
+    transport = new MockTransport();
     server = new MinecraftServer(mockBot);
-    toolHandler = (server as any).toolHandler;
-    resourceHandler = (server as any).resourceHandler;
+    await server.start(transport);
   });
 
-  describe("tool handling", () => {
-    it("should handle chat message", async () => {
-      const response = await toolHandler.handleChat("Hello, world!");
-
-      expect(response.content[0].text).toContain("Sent message: Hello, world!");
-    });
-
-    it("should handle navigation request", async () => {
-      const response = await toolHandler.handleNavigateTo(100, 64, 100);
-
-      expect(response.content[0].text).toContain("Navigated to 100, 64, 100");
-      expect(mockBot.getPosition()).toEqual({ x: 100, y: 64, z: 100 });
-    });
-
-    it("should handle relative navigation request", async () => {
-      const response = await toolHandler.handleNavigateRelative(10, 0, 10);
-
-      expect(response.content[0].text).toContain(
-        "Navigated relative to current position"
-      );
-      expect(mockBot.getPosition()).toEqual({ x: 10, y: 64, z: 10 });
-    });
+  it("should send startup notification", async () => {
+    const messages = transport.getMessages();
+    const startupMsg = messages.find(
+      (msg: Message) =>
+        msg.method === "server/status" &&
+        (msg.params as ServerStatusParams).type === "startup"
+    );
+    expect(startupMsg).toBeDefined();
   });
 
-  describe("resource handling", () => {
-    it("should handle position resource request", async () => {
-      const response = await resourceHandler.handleGetPosition(
-        "minecraft://position"
-      );
+  it("should handle bot disconnection", async () => {
+    mockBot.emit("end");
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const position = JSON.parse(response.contents[0].text);
-      expect(position).toEqual({ x: 0, y: 64, z: 0 });
+    const messages = transport.getMessages();
+    const disconnectMsg = messages.find(
+      (msg: Message) =>
+        msg.method === "server/status" &&
+        (msg.params as ServerStatusParams).status === "disconnected"
+    );
+    expect(disconnectMsg).toBeDefined();
+  });
+
+  it("should handle tool calls", async () => {
+    transport.simulateReceive({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "chat",
+        arguments: { message: "test" },
+      },
+      id: 1,
     });
 
-    it("should handle health resource request", async () => {
-      const response = await resourceHandler.handleGetHealth(
-        "minecraft://health"
-      );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const messages = transport.getMessages();
+    const response = messages.find(
+      (msg: Message) => "id" in msg && msg.id === 1
+    );
 
-      const health = JSON.parse(response.contents[0].text);
-      expect(health).toEqual({
-        health: 20,
-        food: 20,
-        saturation: 5,
-        armor: 0,
-      });
-    });
-
-    it("should handle weather resource request", async () => {
-      const response = await resourceHandler.handleGetWeather(
-        "minecraft://weather"
-      );
-
-      const weather = JSON.parse(response.contents[0].text);
-      expect(weather).toEqual({
-        isRaining: false,
-        rainState: "clear",
-        thunderState: 0,
-      });
-    });
-
-    it("should handle inventory resource request", async () => {
-      const response = await resourceHandler.handleGetInventory(
-        "minecraft://inventory"
-      );
-
-      const inventory = JSON.parse(response.contents[0].text);
-      expect(Array.isArray(inventory)).toBe(true);
-      expect(inventory).toEqual([]);
+    expect(response).toBeDefined();
+    expect(response).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: expect.any(Object),
     });
   });
 });

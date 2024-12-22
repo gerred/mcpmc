@@ -2,7 +2,7 @@
   "compilerOptions": {
     // Enable latest features
     "lib": ["ESNext", "DOM"],
-    "target": "ESNext",
+    "target": "ESNext", 
     "module": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
@@ -25,5 +25,11 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage"
+  ]
 }

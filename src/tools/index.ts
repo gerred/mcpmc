@@ -2,7 +2,6 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
-  ConnectSchema,
   ChatSchema,
   NavigateSchema,
   NavigateRelativeSchema,

@@ -1,15 +1,9 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type {
-  Request,
-  Result,
-  Notification,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { Request, Result, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { MineflayerBot } from "./bot";
@@ -20,6 +14,8 @@ import { MinecraftResourceHandler } from "../handlers/resources";
 import type { ResourceHandler } from "../handlers/resources";
 import type { ResourceResponse as HandlerResourceResponse } from "../handlers/resources";
 import { z } from "zod";
+import { EventEmitter } from "events";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport";
 
 const NavigateParams = z.object({
   x: z.number(),
@@ -840,6 +836,19 @@ const MINECRAFT_RESOURCES = [
   },
 ];
 
+interface JSONRPCError {
+  code: number;
+  message: string;
+  data?: any;
+}
+
+interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  id: string | number | null;
+  error?: JSONRPCError;
+  result?: any;
+}
+
 export class MinecraftServer {
   protected bot: MinecraftBot;
   protected toolHandler: ToolHandler;
@@ -850,6 +859,10 @@ export class MinecraftServer {
     port: number;
     username: string;
   };
+  private isConnected: boolean = false;
+  private reconnectAttempts: number = 0;
+  private readonly maxReconnectAttempts: number = 3;
+  private readonly reconnectDelay: number = 5000; // 5 seconds
 
   constructor(
     bot?: MinecraftBot,
@@ -889,14 +902,83 @@ export class MinecraftServer {
       }
     );
 
-    // Set up tool handlers
+    this.setupHandlers();
+    this.setupBotEventHandlers();
+  }
+
+  private setupBotEventHandlers() {
+    if (this.bot instanceof EventEmitter) {
+      this.bot.on("spawn", () => {
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.server
+          .notification({
+            method: "server/status",
+            params: {
+              type: "connection",
+              status: "connected",
+              host: this.connectionParams?.host || "localhost",
+              port: this.connectionParams?.port || 25565,
+            },
+          })
+          .catch((error) => {
+            console.error("Failed to send spawn notification:", error);
+          });
+      });
+
+      this.bot.on("end", async () => {
+        this.isConnected = false;
+        try {
+          await this.server.notification({
+            method: "server/status",
+            params: {
+              type: "connection",
+              status: "disconnected",
+              host: this.connectionParams?.host || "localhost",
+              port: this.connectionParams?.port || 25565,
+            },
+          });
+
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            await new Promise((resolve) =>
+              setTimeout(resolve, this.reconnectDelay)
+            );
+            if (this.connectionParams) {
+              await this.bot.connect(
+                this.connectionParams.host,
+                this.connectionParams.port,
+                this.connectionParams.username
+              );
+            }
+          }
+        } catch (error) {
+          console.error("Failed to handle disconnection:", error);
+        }
+      });
+
+      this.bot.on("error", async (error: Error) => {
+        try {
+          await this.server.notification({
+            method: "server/status",
+            params: {
+              type: "error",
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        } catch (notificationError) {
+          console.error(
+            "Failed to send error notification:",
+            notificationError
+          );
+        }
+      });
+    }
+  }
+
+  private setupHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: MINECRAFT_TOOLS,
-    }));
-
-    // Set up resource handlers
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-      resources: MINECRAFT_RESOURCES,
     }));
 
     this.server.setRequestHandler(
@@ -929,34 +1011,11 @@ export class MinecraftServer {
               result = await this.resourceHandler.handleGetWeather(uri);
               break;
             default:
-              return {
-                contents: [
-                  {
-                    uri,
-                    mimeType: "application/json",
-                    text: JSON.stringify({
-                      error: `Unknown resource URI: ${uri}`,
-                      isError: true,
-                    }),
-                  },
-                ],
-              };
+              throw new Error(`Resource not found: ${uri}`);
           }
 
-          // Ensure the result has the correct structure
           if (!result.contents || !Array.isArray(result.contents)) {
-            return {
-              contents: [
-                {
-                  uri,
-                  mimeType: "application/json",
-                  text: JSON.stringify({
-                    error: "Invalid resource result format",
-                    isError: true,
-                  }),
-                },
-              ],
-            };
+            throw new Error("Invalid resource result format");
           }
 
           return {
@@ -970,258 +1029,122 @@ export class MinecraftServer {
             })),
           };
         } catch (error) {
-          return {
-            contents: [
-              {
-                uri: request.params.uri,
-                mimeType: "application/json",
-                text: JSON.stringify({
-                  error: `Resource handler error: ${
-                    error instanceof Error ? error.message : String(error)
-                  }`,
-                  isError: true,
-                }),
-              },
-            ],
-          };
+          throw error;
         }
       }
     );
 
-    // Set up tool handlers
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      try {
-        const { name, arguments: args } = request.params;
+    this.server.setRequestHandler(
+      CallToolRequestSchema,
+      async (request: {
+        id?: string | number;
+        params: { name: string; arguments?: Record<string, any> };
+      }) => {
+        try {
+          const { name, arguments: args } = request.params;
 
-        if (!args) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "No arguments provided",
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        switch (name) {
-          case "chat": {
-            const { message } = ChatParams.parse(args);
-            return this.toolHandler.handleChat(message);
-          }
-          case "navigate_to": {
-            const { x, y, z } = NavigateParams.parse(args);
-            return this.toolHandler.handleNavigateTo(x, y, z);
-          }
-          case "navigate_relative": {
-            const { dx, dy, dz } = NavigateRelativeParams.parse(args);
-            return this.toolHandler.handleNavigateRelative(dx, dy, dz);
-          }
-          case "dig_block": {
-            const { x, y, z } = DigBlockParams.parse(args);
-            return this.toolHandler.handleDigBlock(x, y, z);
-          }
-          case "dig_block_relative": {
-            const { dx, dy, dz } = DigBlockRelativeParams.parse(args);
-            return this.toolHandler.handleDigBlockRelative(dx, dy, dz);
-          }
-          case "dig_area": {
-            const { start, end } = DigAreaParams.parse(args);
-            return this.toolHandler.handleDigArea(start, end);
-          }
-          case "dig_area_relative": {
-            const { start, end } = DigAreaRelativeParams.parse(args);
-            return this.toolHandler.handleDigAreaRelative(start, end);
-          }
-          case "place_block": {
-            const { x, y, z, blockName } = PlaceBlockParams.parse(args);
-            return this.toolHandler.handlePlaceBlock(x, y, z, blockName);
-          }
-          case "follow_player": {
-            const { username, distance } = FollowPlayerParams.parse(args);
-            return this.toolHandler.handleFollowPlayer(username, distance);
-          }
-          case "attack_entity": {
-            const { entityName, maxDistance } = AttackEntityParams.parse(args);
-            return this.toolHandler.handleAttackEntity(entityName, maxDistance);
-          }
-          case "inspect_block": {
-            const { position, includeState } = InspectBlockParams.parse(args);
-            return this.toolHandler.handleInspectBlock(position, includeState);
-          }
-          case "find_blocks": {
-            const { blockTypes, maxDistance, maxCount, constraints } =
-              FindBlocksParams.parse(args);
-            return this.toolHandler.handleFindBlocks(
-              blockTypes,
-              maxDistance,
-              maxCount,
-              constraints
-            );
-          }
-          case "inspect_inventory": {
-            const { itemType, includeEquipment } =
-              InspectInventoryParams.parse(args);
-            return this.toolHandler.handleInspectInventory(
-              itemType,
-              includeEquipment
-            );
-          }
-          case "find_entities": {
-            const { entityTypes, maxDistance, maxCount, constraints } =
-              FindEntitiesParams.parse(args);
-            return this.toolHandler.handleFindEntities(
-              entityTypes,
-              maxDistance,
-              maxCount,
-              constraints
-            );
-          }
-          case "check_path": {
-            const { destination, dryRun, includeObstacles } =
-              CheckPathParams.parse(args);
-            return this.toolHandler.handleCheckPath(
-              destination,
-              dryRun,
-              includeObstacles
-            );
-          }
-          case "craft_item": {
-            const { itemName, quantity, useCraftingTable } =
-              CraftItemSchema.parse(args);
-            return this.toolHandler.handleCraftItem(
-              itemName,
-              quantity,
-              useCraftingTable
-            );
-          }
-          case "smelt_item": {
-            const { itemName, fuelName, quantity } =
-              SmeltItemSchema.parse(args);
-            return this.toolHandler.handleSmeltItem(
-              itemName,
-              fuelName,
-              quantity
-            );
-          }
-          case "equip_item": {
-            const { itemName, destination } = EquipItemSchema.parse(args);
-            return this.toolHandler.handleEquipItem(itemName, destination);
-          }
-          case "deposit_item": {
-            const { containerPosition, itemName, quantity } =
-              ContainerInteractionSchema.parse(args);
-            return this.toolHandler.handleDepositItem(
-              containerPosition,
-              itemName,
-              quantity
-            );
-          }
-          case "withdraw_item": {
-            const { containerPosition, itemName, quantity } =
-              ContainerInteractionSchema.parse(args);
-            return this.toolHandler.handleWithdrawItem(
-              containerPosition,
-              itemName,
-              quantity
-            );
-          }
-          default:
-            return {
-              content: [{ type: "text", text: `Unknown tool: ${name}` }],
-              isError: true,
+          if (!args) {
+            throw {
+              code: -32602,
+              message: "Invalid params: no arguments provided",
             };
-        }
-      } catch (error) {
-        if (error instanceof z.ZodError) {
+          }
+
+          let result;
+          switch (name) {
+            case "chat": {
+              const { message } = ChatParams.parse(args);
+              result = await this.toolHandler.handleChat(message);
+              break;
+            }
+            case "navigate_to": {
+              const { x, y, z } = NavigateParams.parse(args);
+              result = await this.toolHandler.handleNavigateTo(x, y, z);
+              break;
+            }
+            case "navigate_relative": {
+              const { dx, dy, dz } = NavigateRelativeParams.parse(args);
+              result = await this.toolHandler.handleNavigateRelative(
+                dx,
+                dy,
+                dz
+              );
+              break;
+            }
+            default:
+              throw {
+                code: -32601,
+                message: `Unknown tool: ${name}`,
+              };
+          }
+
+          // Return properly formatted JSON-RPC response
           return {
-            content: [
-              {
-                type: "text",
-                text: `Invalid arguments: ${error.errors
-                  .map((e) => `${e.path.join(".")}: ${e.message}`)
-                  .join(", ")}`,
+            jsonrpc: "2.0",
+            id: request.id ?? null,
+            result: result,
+          };
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            throw {
+              code: -32602,
+              message: "Invalid params",
+              data: {
+                errors: error.errors.map((e) => ({
+                  path: e.path.join("."),
+                  message: e.message,
+                })),
               },
-            ],
-            isError: true,
+            };
+          }
+          if (typeof error === "object" && error !== null && "code" in error) {
+            throw error;
+          }
+          throw {
+            code: -32603,
+            message: error instanceof Error ? error.message : String(error),
           };
         }
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            },
-          ],
-          isError: true,
-        };
       }
-    });
+    );
   }
 
-  async start(): Promise<void> {
+  async start(transport: Transport): Promise<void> {
     try {
-      // Connect to Minecraft server first if we have connection params
-      if (this.bot instanceof MineflayerBot && this.connectionParams) {
-        await this.bot.connect(
-          this.connectionParams.host,
-          this.connectionParams.port,
-          this.connectionParams.username
-        );
-
-        // Replace console.error with JSON-RPC notification
-        this.server.notification({
-          method: "server/status",
-          params: {
-            type: "info",
-            message: `Connected to Minecraft server at ${this.connectionParams.host}:${this.connectionParams.port}`,
-          },
-        });
-      }
-
-      // Then start the MCP server
-      const transport = new StdioServerTransport();
+      // Connect the server to the transport
       await this.server.connect(transport);
 
-      // Replace console.error with JSON-RPC notification
-      this.server.notification({
+      // Send startup notification
+      await this.server.notification({
         method: "server/status",
         params: {
-          type: "info",
-          message: "Mineflayer MCP Server running on stdio",
+          type: "startup",
+          status: "running",
+          transport: "stdio",
         },
       });
 
-      // Keep the process alive
-      process.stdin.resume();
+      // Setup bot event handlers
+      this.setupBotEventHandlers();
 
-      // Handle process termination gracefully
+      // Keep process alive
+      process.stdin.resume();
       process.on("SIGINT", () => {
         this.bot?.disconnect();
         process.exit(0);
       });
-
       process.on("SIGTERM", () => {
         this.bot?.disconnect();
         process.exit(0);
       });
     } catch (error) {
-      // Replace console.error with JSON-RPC error response
-      this.server.notification({
-        method: "server/status",
-        params: {
-          type: "error",
-          message: `Failed to start server: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+      throw {
+        code: -32000,
+        message: "Server startup failed",
+        data: {
+          error: error instanceof Error ? error.message : String(error),
         },
-      });
-
-      // Rethrow the error instead of exiting
-      throw error;
+      };
     }
   }
 }

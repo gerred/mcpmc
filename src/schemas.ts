@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { Vec3 } from "vec3";
 
 // Base schemas
 export const PositionSchema = z.object({

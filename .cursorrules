@@ -15,6 +15,17 @@ When an MCP client issues requests, the server routes these to either:
 • The "toolHandler" (for effectful actions such as "dig_block")  
 • The "resourceHandler" (for returning game state like position, health, etc.)
 
+## MCP Types and Imports
+
+When working with MCP types:
+
+1. Import types from the correct SDK paths:
+   - Transport: "@modelcontextprotocol/sdk/shared/transport.js"
+   - JSONRPCMessage and other core types: "@modelcontextprotocol/sdk/types.js"
+2. Always check for optional fields using type guards (e.g., 'id' in message)
+3. Follow existing implementations in example servers when unsure
+4. Never modify working type imports - MCP has specific paths that must be used
+
 ## API Compatibility and Alternatives
 
 When working with Mineflayer's API:

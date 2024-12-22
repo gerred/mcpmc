@@ -1,4 +1,3 @@
-import type { Bot as MineflayerBot } from "mineflayer";
 import type { Entity as PrismarineEntity } from "prismarine-entity";
 import type { Block as PrismarineBlock } from "prismarine-block";
 import type { Item as PrismarineItem } from "prismarine-item";
@@ -68,6 +67,7 @@ export interface Container {
  */
 export interface MinecraftBot {
   // ---- Connection ----
+  connect(host: string, port: number, username: string): Promise<void>;
   disconnect(): void;
 
   // ---- Chat ----

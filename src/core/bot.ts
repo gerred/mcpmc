@@ -127,7 +127,7 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
       } catch (error) {
         this.logError("Bot setup error", error);
         this.isConnecting = false;
-        this.sendJsonRpcError(-32001, "Failed to create bot", {
+        this.sendJSONRPCError(-32001, "Failed to create bot", {
           error: error instanceof Error ? error.message : String(error),
         });
         reject(error);
@@ -144,7 +144,7 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
       this.movements.allowSprinting = true;
       this.bot.pathfinder.setMovements(this.movements);
     } catch (error) {
-      this.sendJsonRpcError(-32002, "Error setting up movements", {
+      this.sendJSONRPCError(-32002, "Error setting up movements", {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -166,20 +166,21 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
         jsonrpc: "2.0",
         method,
         params,
+        id: null,
       }) + "\n"
     );
   }
 
-  private sendJsonRpcError(code: number, message: string, data?: any) {
+  private sendJSONRPCError(code: number, message: string, data?: any) {
     process.stdout.write(
       JSON.stringify({
         jsonrpc: "2.0",
+        id: null,
         error: {
           code,
           message,
           data,
         },
-        id: null,
       }) + "\n"
     );
   }
@@ -1125,15 +1126,10 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
   }
 
   private wrapError(message: string): never {
-    const response: ToolResponse = {
-      content: [
-        {
-          type: "text",
-          text: message,
-        },
-      ],
-      isError: true,
+    throw {
+      code: -32603,
+      message,
+      data: null,
     };
-    throw response;
   }
 }

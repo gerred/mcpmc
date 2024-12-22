@@ -1,3 +1,4 @@
+import { EventEmitter } from "events";
 import type { MinecraftBot } from "../../types/minecraft";
 import type {
   Player,
@@ -19,18 +20,14 @@ interface ConnectionParams {
   username: string;
 }
 
-export class MockMinecraftBot implements MinecraftBot {
-  private connected = true;
-  private position: Position = { x: 0, y: 64, z: 0 };
+export class MockMinecraftBot extends EventEmitter implements MinecraftBot {
+  private position = { x: 0, y: 64, z: 0 };
+  private isConnected = true;
   private _inventory: { items: InventoryItem[] } = { items: [] };
-
-  constructor(params: ConnectionParams) {
-    // In a mock, we just store the params but don't actually connect
-    this.connected = true;
-  }
+  private connectCount = 0;
 
   get entity() {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return {
       position: new Vec3(this.position.x, this.position.y, this.position.z),
       velocity: new Vec3(0, 0, 0),
@@ -40,12 +37,12 @@ export class MockMinecraftBot implements MinecraftBot {
   }
 
   get entities() {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return {};
   }
 
   get inventory() {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return {
       items: () => this._inventory.items,
       slots: {},
@@ -53,107 +50,53 @@ export class MockMinecraftBot implements MinecraftBot {
   }
 
   get pathfinder() {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return {
-      setMovements: (movements: Movements) => {},
-      goto: (goal: goals.Goal) => Promise.resolve(),
-      getPathTo: async (
-        movements: Movements,
-        goal: goals.Goal,
-        timeout?: number
-      ) => {
-        return {
-          path: [new Vec3(0, 0, 0)],
-        };
-      },
+      setMovements: () => {},
+      goto: () => Promise.resolve(),
+      getPathTo: () => Promise.resolve(null),
     };
   }
 
+  constructor(private connectionParams: ConnectionParams) {
+    super();
+    setTimeout(() => {
+      this.emit("spawn");
+    }, 0);
+  }
+
+  async connect(host: string, port: number, username: string): Promise<void> {
+    this.isConnected = true;
+    this.connectCount++;
+    setTimeout(() => {
+      this.emit("spawn");
+    }, 10);
+    return Promise.resolve();
+  }
+
   disconnect(): void {
-    this.connected = false;
-  }
-
-  private checkConnection() {
-    if (!this.connected) throw new Error("Not connected");
-  }
-
-  chat(message: string): void {
-    this.checkConnection();
-  }
-
-  getPosition(): Position | null {
-    if (!this.connected) return null;
-    return this.position;
-  }
-
-  getHealth(): number {
-    this.checkConnection();
-    return 20;
-  }
-
-  getInventory(): InventoryItem[] {
-    this.checkConnection();
-    return [];
-  }
-
-  getPlayers(): Player[] {
-    this.checkConnection();
-    return [];
-  }
-
-  async navigateTo(x: number, y: number, z: number): Promise<void> {
-    this.checkConnection();
-    this.position = { x, y, z };
-  }
-
-  async digBlock(x: number, y: number, z: number): Promise<void> {
-    this.checkConnection();
-  }
-
-  async digArea(
-    start: Position,
-    end: Position,
-    progressCallback?: (
-      progress: number,
-      blocksDug: number,
-      totalBlocks: number
-    ) => void
-  ): Promise<void> {
-    this.checkConnection();
-    if (progressCallback) {
-      progressCallback(100, 1, 1);
+    if (this.isConnected) {
+      this.isConnected = false;
+      this.emit("end");
     }
   }
 
-  async placeBlock(
-    x: number,
-    y: number,
-    z: number,
-    blockName: string
-  ): Promise<void> {
-    this.checkConnection();
+  chat(message: string): void {
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
-  async followPlayer(username: string, distance?: number): Promise<void> {
-    this.checkConnection();
+  getPosition() {
+    if (!this.isConnected) throw new Error("Not connected");
+    return { ...this.position };
   }
 
-  async attackEntity(entityName: string, maxDistance?: number): Promise<void> {
-    this.checkConnection();
+  getHealth() {
+    if (!this.isConnected) throw new Error("Not connected");
+    return 20;
   }
 
-  getEntitiesNearby(maxDistance?: number): Entity[] {
-    this.checkConnection();
-    return [];
-  }
-
-  getBlocksNearby(maxDistance?: number, count?: number): Block[] {
-    this.checkConnection();
-    return [];
-  }
-
-  getHealthStatus(): HealthStatus {
-    this.checkConnection();
+  getHealthStatus() {
+    if (!this.isConnected) throw new Error("Not connected");
     return {
       health: 20,
       food: 20,
@@ -163,7 +106,7 @@ export class MockMinecraftBot implements MinecraftBot {
   }
 
   getWeather(): Weather {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return {
       isRaining: false,
       rainState: "clear",
@@ -171,14 +114,62 @@ export class MockMinecraftBot implements MinecraftBot {
     };
   }
 
-  async navigateRelative(dx: number, dy: number, dz: number): Promise<void> {
-    this.checkConnection();
-    const pos = this.position;
-    this.position = { x: pos.x + dx, y: pos.y + dy, z: pos.z + dz };
+  getInventory() {
+    if (!this.isConnected) throw new Error("Not connected");
+    return this._inventory.items;
+  }
+
+  getPlayers() {
+    if (!this.isConnected) throw new Error("Not connected");
+    return [];
+  }
+
+  async navigateTo(x: number, y: number, z: number) {
+    if (!this.isConnected) throw new Error("Not connected");
+    this.position = { x, y, z };
+  }
+
+  async navigateRelative(dx: number, dy: number, dz: number) {
+    if (!this.isConnected) throw new Error("Not connected");
+    this.position = {
+      x: this.position.x + dx,
+      y: this.position.y + dy,
+      z: this.position.z + dz,
+    };
+  }
+
+  async digBlock(x: number, y: number, z: number) {
+    if (!this.isConnected) throw new Error("Not connected");
+  }
+
+  async digArea(start: any, end: any) {
+    if (!this.isConnected) throw new Error("Not connected");
+  }
+
+  async placeBlock(x: number, y: number, z: number, blockName: string) {
+    if (!this.isConnected) throw new Error("Not connected");
+  }
+
+  async followPlayer(username: string, distance: number) {
+    if (!this.isConnected) throw new Error("Not connected");
+  }
+
+  async attackEntity(entityName: string, maxDistance: number) {
+    if (!this.isConnected) throw new Error("Not connected");
+  }
+
+  getEntitiesNearby(maxDistance?: number): Entity[] {
+    if (!this.isConnected) throw new Error("Not connected");
+    return [];
+  }
+
+  getBlocksNearby(maxDistance?: number, count?: number): Block[] {
+    if (!this.isConnected) throw new Error("Not connected");
+    return [];
   }
 
   async digBlockRelative(dx: number, dy: number, dz: number): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   async digAreaRelative(
@@ -190,14 +181,14 @@ export class MockMinecraftBot implements MinecraftBot {
       totalBlocks: number
     ) => void
   ): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     if (progressCallback) {
       progressCallback(100, 1, 1);
     }
   }
 
   blockAt(position: Vec3): Block | null {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return null;
   }
 
@@ -207,17 +198,17 @@ export class MockMinecraftBot implements MinecraftBot {
     count: number;
     point?: Vec3;
   }): Vec3[] {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return [];
   }
 
   getEquipmentDestSlot(destination: string): number {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return 0;
   }
 
   canSeeEntity(entity: Entity): boolean {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return false;
   }
 
@@ -226,19 +217,19 @@ export class MockMinecraftBot implements MinecraftBot {
     quantity?: number,
     useCraftingTable?: boolean
   ): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   async equipItem(itemName: string, destination: string): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   async dropItem(itemName: string, quantity?: number): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   async openContainer(position: Position): Promise<Container> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return {
       type: "chest",
       position,
@@ -247,16 +238,16 @@ export class MockMinecraftBot implements MinecraftBot {
   }
 
   closeContainer(): void {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   getRecipe(itemName: string): Recipe | null {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return null;
   }
 
   listAvailableRecipes(): Recipe[] {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return [];
   }
 
@@ -265,7 +256,7 @@ export class MockMinecraftBot implements MinecraftBot {
     fuelName: string,
     quantity?: number
   ): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   async depositItem(
@@ -273,7 +264,7 @@ export class MockMinecraftBot implements MinecraftBot {
     itemName: string,
     quantity?: number
   ): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   async withdrawItem(
@@ -281,11 +272,15 @@ export class MockMinecraftBot implements MinecraftBot {
     itemName: string,
     quantity?: number
   ): Promise<void> {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
   }
 
   canCraft(recipe: Recipe): boolean {
-    this.checkConnection();
+    if (!this.isConnected) throw new Error("Not connected");
     return false;
+  }
+
+  getConnectCount(): number {
+    return this.connectCount;
   }
 }
