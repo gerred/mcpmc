@@ -1,0 +1,64 @@
+{
+  "name": "@gerred/mcpmc",
+  "version": "0.0.1",
+  "description": "A MCP server for interacting with Minecraft via Mineflayer",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "mcpmc": "./build/index.js"
+  },
+  "files": [
+    "build",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir=build --target=node && chmod +x build/index.js",
+    "prepare": "husky install && bun run build",
+    "watch": "bun build ./src/index.ts --outdir=build --target=node --watch",
+    "inspector": "bunx @modelcontextprotocol/inspector build/index.js",
+    "start": "bun run build/index.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/inspector": "https://github.com/modelcontextprotocol/inspector.git#main",
+    "@modelcontextprotocol/sdk": "1.0.4",
+    "bunx": "^0.1.0",
+    "mineflayer": "^4.23.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "vec3": "^0.1.10",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/jest": "^29.5.14",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.3.3"
+  },
+  "module": "index.ts",
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gerred/mcpmc.git"
+  },
+  "keywords": [
+    "minecraft",
+    "mineflayer",
+    "ai",
+    "bot",
+    "mcp",
+    "claude"
+  ],
+  "author": "Gerred Dillon",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/gerred/mcpmc/issues"
+  },
+  "homepage": "https://github.com/gerred/mcpmc#readme"
+}

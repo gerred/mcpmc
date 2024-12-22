@@ -1,0 +1,85 @@
+# .cursorrules
+
+## Overview
+
+This project uses the Model Context Protocol (MCP) to bridge interactions between a Minecraft bot (powered by Mineflayer) and an LLM-based client.
+
+The essential flow is:
+
+1. The server starts up ("MinecraftServer") and connects to a Minecraft server automatically (via the Mineflayer bot).
+2. The MCP server is exposed through standard JSON-RPC over stdio.
+3. MCP "tools" correspond to actionable commands in Minecraft (e.g., "dig_area", "navigate_to", etc.).
+4. MCP "resources" correspond to read-only data from Minecraft (e.g., "minecraft://inventory").
+
+When an MCP client issues requests, the server routes these to either:
+• The "toolHandler" (for effectful actions such as "dig_block")  
+• The "resourceHandler" (for returning game state like position, health, etc.)
+
+## API Compatibility and Alternatives
+
+When working with Mineflayer's API:
+
+1. Always check the actual API implementation before assuming method availability
+2. When encountering type/compatibility issues:
+   - Look for alternative methods in the API (e.g., moveSlotItem instead of click)
+   - Consider type casting with 'unknown' when necessary (e.g., `as unknown as Furnace`)
+   - Add proper type annotations to parameters to avoid implicit any
+3. For container operations:
+   - Prefer high-level methods like moveSlotItem over low-level ones
+   - Always handle cleanup (close containers) in finally blocks
+   - Cast specialized containers (like Furnace) appropriately
+4. Error handling:
+   - Wrap all API calls in try/catch blocks
+   - Use wrapError for consistent error reporting
+   - Include specific error messages that help diagnose issues
+
+## File Layout
+
+- src/types/minecraft.ts  
+  Type definitions for core Minecraft interfaces (Position, Block, Entity, etc.). Also includes the "MinecraftBot" interface, specifying the methods the bot should implement (like "digArea", "followPlayer", "attackEntity", etc.).
+
+- src/core/bot.ts  
+  Contains the main "MineflayerBot" class, an implementation of "MinecraftBot" using a real Mineflayer bot with pathfinding, digging, etc.
+
+- src/handlers/tools.ts  
+  Implements "ToolHandler" functions that receive tool requests and execute them against the MinecraftBot methods (e.g., "handleDigArea").
+
+- src/handlers/resources.ts  
+  Implements "ResourceHandler" for read-only data fetches (position, inventory, weather, etc.).
+
+- src/core/server.ts (and src/server.ts in some setups)  
+  Main MCP server that sets up request handlers, ties in the "MineflayerBot" instance, and starts listening for JSON-RPC calls over stdio.
+
+- src/**tests**/\*  
+  Contains Jest tests and "MockMinecraftBot" (a simplified implementation of "MinecraftBot" for testing).
+
+## Tools and Technologies
+
+- Model Context Protocol - an API for clients and servers to expose tools, resources, and prompts.
+- Mineflayer
+- Prismarine
+
+## Code
+
+- Write modern TypeScript against 2024 standards and expectations. Cleanly use async/await where possible.
+- Use bun for CLI commands
+
+## Error Handling
+
+- All errors MUST be properly formatted as JSON-RPC responses over stdio
+- Never throw errors directly as this will crash MCP clients
+- Use the ToolResponse interface with isError: true for error cases
+- Ensure all error messages are properly stringified JSON objects
+
+## Logging Rules
+
+- DO NOT use console.log, console.error, or any other console methods for logging
+- All communication MUST be through JSON-RPC responses over stdio
+- For error conditions, use proper JSON-RPC error response format
+- For debug/info messages, include them in the response data structure
+- Status updates should be sent as proper JSON-RPC notifications
+- Never write directly to stdout/stderr as it will corrupt the JSON-RPC stream
+
+## Commit Rules
+
+- Use conventional commits as the structure.
