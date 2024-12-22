@@ -16,6 +16,8 @@ The build script makes the output file executable with `chmod +x`. The shebang l
 
 1. Run tests and build: `bun test && bun run build`
 2. Bump version: `npm version patch|minor|major` 
-3. Publish: `npm publish --otp=<code>`
+3. Push changes: `git push && git push --tags`
+4. Publish: `npm publish --otp=<code>`
    - Requires 2FA authentication
    - Get OTP code from authenticator app
+   - Package will be published to npm registry with public access

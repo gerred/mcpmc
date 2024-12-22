@@ -78,7 +78,7 @@ export interface MinecraftBot {
   getHealth(): number;
   getInventory(): InventoryItem[];
   getPlayers(): Player[];
-  navigateTo(x: number, y: number, z: number): Promise<void>;
+  navigateTo(x: number, y: number, z: number, progressCallback?: (progress: number) => void): Promise<void>;
   digBlock(x: number, y: number, z: number): Promise<void>;
   digArea(
     start: Position,
@@ -100,7 +100,7 @@ export interface MinecraftBot {
   getWeather(): Weather;
 
   // ---- Relative Movement & Digging ----
-  navigateRelative(dx: number, dy: number, dz: number): Promise<void>;
+  navigateRelative(dx: number, dy: number, dz: number, progressCallback?: (progress: number) => void): Promise<void>;
   digBlockRelative(dx: number, dy: number, dz: number): Promise<void>;
   digAreaRelative(
     start: { dx: number; dy: number; dz: number },

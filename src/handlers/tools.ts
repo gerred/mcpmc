@@ -100,6 +100,16 @@ export interface ToolHandler {
 export class MinecraftToolHandler implements ToolHandler {
   constructor(private bot: MinecraftBot) {}
 
+  private sendJsonRpcNotification(method: string, params: any) {
+    process.stdout.write(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method,
+        params,
+      }) + "\n"
+    );
+  }
+
   async handleChat(message: string): Promise<ToolResponse> {
     this.bot.chat(message);
     return {
@@ -112,15 +122,28 @@ export class MinecraftToolHandler implements ToolHandler {
       ],
     };
   }
-
   async handleNavigateTo(
     x: number,
     y: number,
     z: number
   ): Promise<ToolResponse> {
-    await this.bot.navigateTo(x, y, z);
+    let progressToken = Date.now().toString();
+
+    const sendProgress = (progress: number) => {
+      this.sendJsonRpcNotification("tool/progress", {
+        token: progressToken,
+        progress,
+        status: progress < 100 ? "in_progress" : "complete",
+        message: `Navigation progress: ${Math.round(progress)}%`,
+      });
+    };
+
+    await this.bot.navigateTo(x, y, z, sendProgress);
+
     return {
-      _meta: {},
+      _meta: {
+        progressToken,
+      },
       content: [
         {
           type: "text",
@@ -135,9 +158,23 @@ export class MinecraftToolHandler implements ToolHandler {
     dy: number,
     dz: number
   ): Promise<ToolResponse> {
-    await this.bot.navigateRelative(dx, dy, dz);
+    const progressToken = Date.now().toString();
+
+    const sendProgress = (progress: number) => {
+      this.sendJsonRpcNotification("tool/progress", {
+        token: progressToken,
+        progress,
+        status: progress < 100 ? "in_progress" : "complete",
+        message: `Navigation progress: ${Math.round(progress)}%`,
+      });
+    };
+
+    await this.bot.navigateRelative(dx, dy, dz, sendProgress);
+
     return {
-      _meta: {},
+      _meta: {
+        progressToken,
+      },
       content: [
         {
           type: "text",

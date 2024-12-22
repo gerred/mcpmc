@@ -26,6 +26,17 @@ When working with MCP types:
 3. Follow existing implementations in example servers when unsure
 4. Never modify working type imports - MCP has specific paths that must be used
 
+## Progress Callbacks
+
+For long-running operations like navigation and digging:
+1. Use progress callbacks to report status to MCP clients
+2. Include a progressToken in _meta for tracking
+3. Send notifications via "tool/progress" with:
+   - token: unique identifier
+   - progress: 0-100 percentage
+   - status: "in_progress" or "complete"
+   - message: human-readable progress
+
 ## API Compatibility and Alternatives
 
 When working with Mineflayer's API:

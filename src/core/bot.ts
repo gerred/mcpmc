@@ -245,11 +245,38 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
     }));
   }
 
-  async navigateTo(x: number, y: number, z: number): Promise<void> {
+  async navigateTo(
+    x: number, 
+    y: number, 
+    z: number,
+    progressCallback?: (progress: number) => void
+  ): Promise<void> {
     if (!this.bot) return this.wrapError("Not connected");
     const goal = new goals.GoalNear(x, y, z, 1);
+    
     try {
-      await this.bot.pathfinder.goto(goal);
+      const startPos = this.bot.entity.position;
+      const targetPos = new Vec3(x, y, z);
+      const totalDistance = startPos.distanceTo(targetPos);
+      
+      // Set up progress monitoring
+      const checkProgress = () => {
+        if (!this.bot) return;
+        const currentPos = this.bot.entity.position;
+        const remainingDistance = currentPos.distanceTo(targetPos);
+        const progress = Math.min(100, ((totalDistance - remainingDistance) / totalDistance) * 100);
+        progressCallback?.(progress);
+      };
+
+      const progressInterval = setInterval(checkProgress, 500);
+      
+      try {
+        await this.bot.pathfinder.goto(goal);
+      } finally {
+        clearInterval(progressInterval);
+        // Send final progress
+        progressCallback?.(100);
+      }
     } catch (error) {
       return this.wrapError(
         `Failed to navigate: ${
@@ -539,7 +566,12 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
     };
   }
 
-  async navigateRelative(dx: number, dy: number, dz: number): Promise<void> {
+  async navigateRelative(
+    dx: number, 
+    dy: number, 
+    dz: number,
+    progressCallback?: (progress: number) => void
+  ): Promise<void> {
     if (!this.bot) return this.wrapError("Not connected");
     const currentPos = this.bot.entity.position;
     const yaw = this.bot.entity.yaw;
@@ -553,7 +585,8 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
       await this.navigateTo(
         currentPos.x + worldDx,
         currentPos.y + dy,
-        currentPos.z + worldDz
+        currentPos.z + worldDz,
+        progressCallback
       );
     } catch (error) {
       return this.wrapError(
