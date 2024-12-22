@@ -1,6 +1,8 @@
 # MCPMC (Minecraft Model Context Protocol)
 
 [![npm version](https://badge.fury.io/js/@gerred%2Fmcpmc.svg)](https://badge.fury.io/js/@gerred%2Fmcpmc)
+[![npm downloads](https://img.shields.io/npm/dm/@gerred/mcpmc.svg)](https://www.npmjs.com/package/@gerred/mcpmc)
+[![CI](https://github.com/gerred/mcpmc/workflows/CI/badge.svg)](https://github.com/gerred/mcpmc/actions?query=workflow%3ACI)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Model Context Protocol (MCP) server for interacting with Minecraft via Mineflayer. This package enables AI agents to control Minecraft bots through a standardized JSON-RPC interface.
