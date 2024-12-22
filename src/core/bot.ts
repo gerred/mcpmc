@@ -60,7 +60,6 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
   constructor(connectionParams: ConnectionParams) {
     super();
     this.lastConnectionParams = connectionParams;
-    this.setupBot();
   }
 
   async connect(host: string, port: number, username: string): Promise<void> {
@@ -155,26 +154,10 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
     this.isConnected = false;
     this.movements = null;
 
-    // Only attempt reconnect if we're not already connecting and haven't exceeded attempts
-    if (
-      !this.isConnecting &&
-      this.reconnectAttempts < this.maxReconnectAttempts
-    ) {
-      this.reconnectAttempts++;
-      this.sendJsonRpcNotification("bot.reconnecting", {
-        attempt: this.reconnectAttempts,
-        maxAttempts: this.maxReconnectAttempts,
-      });
-      setTimeout(() => {
-        if (!this.isConnected && !this.isConnecting) {
-          this.setupBot();
-        }
-      }, 5000 * this.reconnectAttempts);
-    } else {
-      this.sendJsonRpcError(-32003, "Max reconnection attempts reached", {
-        attempts: this.reconnectAttempts,
-      });
-    }
+    // Send a notification that the bot has disconnected
+    this.sendJsonRpcNotification("bot.disconnected", {
+      message: "Bot disconnected from server",
+    });
   }
 
   private sendJsonRpcNotification(method: string, params: any) {
@@ -1142,17 +1125,6 @@ export class MineflayerBot extends EventEmitter implements MinecraftBot {
   }
 
   private wrapError(message: string): never {
-    // If we're not connected and have connection params, try to reconnect first
-    if (!this.bot && this.lastConnectionParams && !this.isConnecting) {
-      this.connect(
-        this.lastConnectionParams.host,
-        this.lastConnectionParams.port,
-        this.lastConnectionParams.username
-      ).catch((error) => {
-        console.error("Failed to reconnect:", error);
-      });
-    }
-
     const response: ToolResponse = {
       content: [
         {

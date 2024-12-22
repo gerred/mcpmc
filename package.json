@@ -1,6 +1,6 @@
 {
   "name": "@gerred/mcpmc",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A MCP server for interacting with Minecraft via Mineflayer",
   "private": false,
   "type": "module",

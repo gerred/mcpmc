@@ -82,4 +82,36 @@ When working with Mineflayer's API:
 
 ## Commit Rules
 
-- Use conventional commits as the structure.
+Commits must follow the Conventional Commits specification (https://www.conventionalcommits.org/):
+
+1. Format: `<type>(<scope>): <description>`
+
+   - `<type>`: The type of change being made:
+     - feat: A new feature
+     - fix: A bug fix
+     - docs: Documentation only changes
+     - style: Changes that do not affect the meaning of the code
+     - refactor: A code change that neither fixes a bug nor adds a feature
+     - perf: A code change that improves performance
+     - test: Adding missing tests or correcting existing tests
+     - chore: Changes to the build process or auxiliary tools
+     - ci: Changes to CI configuration files and scripts
+   - `<scope>`: Optional, indicates section of codebase (e.g., bot, server, tools)
+   - `<description>`: Clear, concise description in present tense
+
+2. Examples:
+
+   - feat(bot): add block placement functionality
+   - fix(server): resolve reconnection loop issue
+   - docs(api): update tool documentation
+   - refactor(core): simplify connection handling
+
+3. Breaking Changes:
+
+   - Include BREAKING CHANGE: in the commit footer
+   - Example: feat(api)!: change tool response format
+
+4. Body and Footer:
+   - Optional but recommended for complex changes
+   - Separated from header by blank line
+   - Use bullet points for multiple changes
