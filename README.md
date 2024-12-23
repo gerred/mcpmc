@@ -1,5 +1,6 @@
 # MCPMC (Minecraft Model Context Protocol)
 
+[![smithery badge](https://smithery.ai/badge/@gerred/mcpmc)](https://smithery.ai/server/@gerred/mcpmc)
 [![npm version](https://badge.fury.io/js/@gerred%2Fmcpmc.svg)](https://badge.fury.io/js/@gerred%2Fmcpmc)
 [![npm downloads](https://img.shields.io/npm/dm/@gerred/mcpmc.svg)](https://www.npmjs.com/package/@gerred/mcpmc)
 [![CI](https://github.com/gerred/mcpmc/workflows/CI/badge.svg)](https://github.com/gerred/mcpmc/actions?query=workflow%3ACI)
@@ -17,6 +18,15 @@ A Model Context Protocol (MCP) server for interacting with Minecraft via Minefla
 
 ## Installation
 
+### Installing via Smithery
+
+To install Minecraft Model Context Protocol for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@gerred/mcpmc):
+
+```bash
+npx -y @smithery/cli install @gerred/mcpmc --client claude
+```
+
+### Manual Installation
 ```bash
 # Using npm
 npm install @gerred/mcpmc
